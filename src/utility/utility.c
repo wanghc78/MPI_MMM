@@ -9,6 +9,27 @@
 #include<stdlib.h>
 #include "utility.h"
 
+int get_problem_size(int argc, char* argv[], int p, int me) {
+    int n = p; //problem size
+    if(argc > 1) {
+      n = atoi(argv[1]);
+      /*Padding the matrix to so that each process get the same size*/
+      int per_n = (n - 1) / p + 1;
+      if(per_n * p != n) {
+          if(me == 0) {
+              fprintf(stdout, "[MMM1DRow]Warning: Padding the problem size from %d to %d!\n", n, per_n * p);
+          }
+          n = per_n * p;
+      } else {
+          if(me == 0) {
+              fprintf(stdout, "[MMM1DRow]Problem size is %d!\n", n);
+          }
+      }
+    }
+    return n;
+}
+
+
 void initial_matrix(double** A_addr, double** BT_addr, double** C_addr, int m, int n, int c) {
     double* A = (double*)malloc(sizeof(double) * m * c);
     double* BT = (double*)malloc(sizeof(double) * n * c);
@@ -38,9 +59,9 @@ int check_result(double* A, double* BT, double* C, int m, int n, int c, int tran
     int err_c = 0; //how many errors found
     int i, j, k;
     double* C_ref = (double*)calloc(m * n, sizeof(double)); //with zeroed
-
     for(i = 0; i < m; i ++) {
         for(j = 0; j < n; j++) {
+            C_ref[i*n+j] = 0;
             for(k = 0; k < c; k++) {
                 C_ref[i*n+j] += A[i*c+k] * BT[j*c+k];
             }
@@ -67,7 +88,7 @@ int check_result(double* A, double* BT, double* C, int m, int n, int c, int tran
 void print_matrix(char* name, double* A, int m, int n, int transposed) {
     int i,j;
     printf("Matrix %s[%d][%d]\n", name, m, n);
-    if(transposed) {
+    if(!transposed) {
         for(i = 0; i < m; i++) {
             for( j = 0; j < n; j++) {
                 printf("%8.2f, ", A[i*n+j]); //note the R is column first

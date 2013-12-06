@@ -12,12 +12,11 @@
 #include "mpi.h"
 #include "utility.h"
 
-
+//test
 int main(int argc, char* argv[]) {
     int me; /* rank of process */
     int p; /* number of processes */
-    int source; /* rank of sender */
-    int dest; /* rank of receiver */
+    int root = 0;
     int tag = 0; /* tag for messages */
     MPI_Status status; /* return status for receive */
 
@@ -29,47 +28,56 @@ int main(int argc, char* argv[]) {
     /* find out number of processes */
     mpi_check(MPI_Comm_size(MPI_COMM_WORLD, &p));
 
-    /*The matrix size is p * p*/
+    /* Decide the problem size */
+    int n = get_problem_size(argc, argv, p, me);
+    int per_n = n / p;
+
+    /*The matrix size is n * n*/
     int i, j, k;
-    double A[p]; //each has one row, i=me, k 0:(p-1)
-    double BT[p * p]; //k,j
-    double C[p * 1]; //i=me, j 0:(p-1)
+    double* A = malloc(per_n * n * sizeof(double)); //each has per_n row, i=me, k 0:(p-1)
+    double* BT = malloc(n * n * sizeof(double)); //k,j
+    double* C = malloc(per_n * n* sizeof(double));; //i=me, j 0:(p-1)
 
     double* M, *NT, *P;
 
-    if (me == 0) {
-        initial_matrix(&M, &NT, &P, p, p, p);
-        memcpy(BT, NT, sizeof(double) * p * p); //copy M->A
+    if (me == root) {
+        initial_matrix(&M, &NT, &P, n, n, n);
+        memcpy(BT, NT, sizeof(double) * n * n); //copy M->A
     }
 
     //use scatter to initial all A
-    mpi_check(MPI_Scatter(M, p, MPI_DOUBLE, A, p, MPI_DOUBLE, 0, MPI_COMM_WORLD));
+    mpi_check(MPI_Scatter(M, n * per_n, MPI_DOUBLE, A, n * per_n, MPI_DOUBLE, root, MPI_COMM_WORLD));
     //now A is ready
 
     //Broadcast from p == 0 to all others
-    mpi_check(MPI_Bcast(BT, p*p, MPI_DOUBLE, 0, MPI_COMM_WORLD));
+    mpi_check(MPI_Bcast(BT, n*n, MPI_DOUBLE, root, MPI_COMM_WORLD));
     //now all has BT ready
 
     //now do the matrix calculation, Note BT is transposed, we juse j,k to iterator
-    for(j = 0; j < p; j++) {
-        C[j] = 0; //initial
-        for(k = 0; k < p; k++) {
-            C[j] += A[k] * BT[j*p+k];   //C[i,j],j is p
+
+    for(i = 0; i < per_n; i++) {
+        for(j = 0; j < n; j++) {
+            C[i*n + j] = 0; //initial
+            for(k = 0; k < n; k++) {
+                C[i*n + j] += A[i*n + k] * BT[j*n+k];   //C[i,j],j is p
+            }
         }
     }
 
+
     //Final collection of all the result to rank 0.
     //Just store the result
-    mpi_check(MPI_Gather(C, p, MPI_DOUBLE, P, p, MPI_DOUBLE, 0, MPI_COMM_WORLD));
-    if(me == 0) {
-        int err_c = check_result(M, NT, P, p, p, p, 0); //not transposed
+    mpi_check(MPI_Gather(C, per_n * n, MPI_DOUBLE, P, per_n * n, MPI_DOUBLE, root, MPI_COMM_WORLD));
+    if(me == root) {
+        int err_c = check_result(M, NT, P, n, n, n, 0); //not transposed
         if(err_c) {
             fprintf(stderr, "[MMM1DRow]Check Failure: %d errors!!!\n", err_c);
         } else {
             printf("[MMM1DRow]Result is verified!\n");
-            //print_matrix("C", P, p, p, 0);
+            //print_matrix("C", P, n, n, 0);
         }
     }
+    free(A);free(BT); free(C);
     MPI_Finalize();
     return 0;
 }

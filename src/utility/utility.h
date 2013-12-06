@@ -18,6 +18,13 @@
         }                                                  \
     } while(0)
 
+
+/*
+ * According to the input to decide the problem size
+ */
+int get_problem_size(int argc, char* argv[], int p, int me);
+
+
 /*
  * Use random data to initialize the
  * A[m*c], B[c*n]/BT[n*c]  C[m*n]
@@ -32,7 +39,6 @@ void initial_matrix(double** A_addr, double** BT_addr, double** C_addr, int m, i
 int check_result(double* A, double* BT, double* C, int m, int n, int c, int transposed);
 
 void print_matrix(char* name, double* A, int m, int n, int transposed);
-
 
 void free_matrix(double* A, double* B, double *C);
 
