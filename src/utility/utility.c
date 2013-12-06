@@ -7,7 +7,9 @@
 
 #include<stdio.h>
 #include<stdlib.h>
+#include <mpi.h>
 #include "utility.h"
+
 
 int get_problem_size(int argc, char* argv[], int p, int me) {
     int n = p; //problem size
@@ -17,16 +19,45 @@ int get_problem_size(int argc, char* argv[], int p, int me) {
       int per_n = (n - 1) / p + 1;
       if(per_n * p != n) {
           if(me == 0) {
-              fprintf(stdout, "[MMM1DRow]Warning: Padding the problem size from %d to %d!\n", n, per_n * p);
+              fprintf(stdout, "[MMM1DRow]Warning: Padding the problem size from %d to %d, Grid size is %d!\n", n, per_n * p, p);
           }
           n = per_n * p;
       } else {
           if(me == 0) {
-              fprintf(stdout, "[MMM1DRow]Problem size is %d!\n", n);
+              fprintf(stdout, "[MMM1DRow]Problem size is %d, Grid size is %d!\n", n, p);
           }
       }
     }
     return n;
+}
+
+
+/*
+ * Construct a sub array type for scatter and gather data
+ */
+void init_subarrtype(int root, int me,
+        int n, int dim_sz, int per_n,
+        MPI_Datatype* subarrtype_addr, int sendcounts[], int displs[]) {
+    int sizes[2]    = {n, n};         /* global size */
+    int subsizes[2] = {per_n, per_n}; /* local size */
+    int starts[2]   = {0,0};          /* where this one starts */
+
+    MPI_Datatype type;
+    mpi_check(MPI_Type_create_subarray(2, sizes, subsizes, starts, MPI_ORDER_C, MPI_DOUBLE, &type));
+    mpi_check(MPI_Type_create_resized(type, 0, per_n*sizeof(double), subarrtype_addr));
+    mpi_check(MPI_Type_commit(subarrtype_addr));
+    int i,j;
+    if(me == root) {
+        for (i=0; i< dim_sz*dim_sz; i++) { sendcounts[i] = 1; }
+        int disp = 0;
+        for (i=0; i<dim_sz; i++) {
+            for (j=0; j<dim_sz; j++) {
+                displs[i*dim_sz+j] = disp;
+                disp += 1;
+            }
+            disp += (per_n-1)*dim_sz;
+        }
+    }
 }
 
 

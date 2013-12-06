@@ -21,141 +21,66 @@
 #define BACK  5
 
 
-void prepare_data(int dim_sz, int coords[3], int src,
-        MPI_Comm cartcomm, MPI_Comm rowcomm, MPI_Comm colcomm, MPI_Comm depthcomm,
-        double A[1], double BT[1],
+
+void scatter_data(int root, int me, int coords[3],
+        int n, int dim_sz, int per_n,
+        MPI_Comm cartcomm, int sendcounts[dim_sz*dim_sz],  int displs[dim_sz*dim_sz], MPI_Datatype subarrtype,
+        double A[per_n * per_n], double BT[per_n * per_n],
         double* M, double* NT) {
-    //now split the data from {0,0,0} -> all
-    //use two phase scatter, later may change tot scatter M
-    double Mrow[dim_sz];
-    double NTrow[dim_sz];
-    if (coords[1] == 0 && coords[2] == 0) {
-        mpi_check(
-                MPI_Scatter(M, dim_sz, MPI_DOUBLE, Mrow, dim_sz, MPI_DOUBLE, src, colcomm));
-    }
-    if (coords[0] == 0 && coords[2] == 0) {
-        mpi_check(
-                MPI_Scatter(NT, dim_sz, MPI_DOUBLE, NTrow, dim_sz, MPI_DOUBLE, src, rowcomm));
-    }
-    mpi_check(MPI_Barrier(cartcomm));
-    //now scatter again
-    if (coords[1] == 0) {
-        mpi_check(
-                MPI_Scatter(Mrow, 1, MPI_DOUBLE, A, 1, MPI_DOUBLE, 0, depthcomm));
-    }
-    if (coords[0] == 0) {
-        mpi_check(
-                MPI_Scatter(NTrow, 1, MPI_DOUBLE, BT, 1, MPI_DOUBLE, 0, depthcomm));
-    }
-    mpi_check(MPI_Barrier(cartcomm));
-    //finally do bcast
-    //now do A's broadcast and B's broadcat
-    mpi_check(MPI_Bcast(A, 1, MPI_DOUBLE, 0, rowcomm));
-    mpi_check(MPI_Bcast(BT, 1, MPI_DOUBLE, 0, colcomm));
 
-    //    //A
-    //    if(coords[1] == 0) { //j == 0
-    //        A[0] = coords[2];
-    //        //then out
-    //        MPI_Send(A, 1, MPI_DOUBLE, nbrs[RIGHT], tag, cartcomm);
-    //    } else if( coords[1] < dim_sz - 1) {
-    //        MPI_Recv(A, 1, MPI_DOUBLE, nbrs[LEFT], tag, cartcomm, &status);
-    //        MPI_Send(A, 1, MPI_DOUBLE, nbrs[RIGHT], tag, cartcomm);
-    //    } else { //right most one
-    //        MPI_Recv(A, 1, MPI_DOUBLE, nbrs[LEFT], tag, cartcomm, &status);
-    //    }
-    //    //B
-    //    if(coords[0] == 0) { //i ==0
-    //        BT[0] = coords[2];
-    //        //then out
-    //        MPI_Send(BT, 1, MPI_DOUBLE, nbrs[DOWN], tag, cartcomm);
-    //    } else if( coords[0] < dim_sz - 1) {
-    //        MPI_Recv(BT, 1, MPI_DOUBLE, nbrs[UP], tag, cartcomm, &status);
-    //        MPI_Send(BT, 1, MPI_DOUBLE, nbrs[DOWN], tag, cartcomm);
-    //    } else { //right most one
-    //        MPI_Recv(BT, 1, MPI_DOUBLE, nbrs[UP], tag, cartcomm, &status);
-    //    }
+    MPI_Comm dim_ik_comm, dim_jk_comm;
+    mpi_check(MPI_Comm_split(cartcomm, coords[1], coords[0]*dim_sz+coords[2], &dim_ik_comm)); //ik as rank
+    mpi_check(MPI_Comm_split(cartcomm, coords[0], coords[1]*dim_sz+coords[2], &dim_jk_comm)); //jk as rank
+
+    if(coords[1] == 0) {
+        mpi_check(MPI_Scatterv(M, sendcounts,  displs, subarrtype,
+                A, per_n*per_n, MPI_DOUBLE, 0, dim_ik_comm));
+    }
+
+    if(coords[0] == 0) {
+        mpi_check(MPI_Scatterv(NT, sendcounts,  displs, subarrtype,
+                BT, per_n*per_n, MPI_DOUBLE, 0, dim_jk_comm));
+    }
+
+    MPI_Comm_free(&dim_ik_comm);
+    MPI_Comm_free(&dim_jk_comm);
 
 }
 
-void gather_result(int dim_sz, int coords[3],
-        MPI_Comm rowcomm, MPI_Comm colcomm,
-        double C[1],
+void gather_result(int root, int me, int coords[3],
+        int n, int dim_sz, int per_n,
+        MPI_Comm cartcomm, MPI_Comm dim_ij_comm, int sendcounts[dim_sz*dim_sz],  int displs[dim_sz*dim_sz], MPI_Datatype subarrtype,
+        double C[per_n*per_n],
         double* M, double* NT, double* P) {
+
+
     if (coords[2] == 0) { //only the k==0 join the merge
-        //all will join
-        double CRow[dim_sz];
-        mpi_check(
-                MPI_Gather(C, 1, MPI_DOUBLE, CRow, 1, MPI_DOUBLE, 0, rowcomm));
-        if (coords[1] == 0) { //first column
-            mpi_check(
-                    MPI_Gather(CRow, dim_sz, MPI_DOUBLE, P, dim_sz, MPI_DOUBLE, 0, colcomm));
-            if (coords[0] == 0) { //the root node
-                int err_c = check_result(M, NT, P, dim_sz, dim_sz, dim_sz, 0); //not transposed
-                if (err_c) {
-                    fprintf(stderr, "[MMM3D]Check Failure: %d errors!!!\n", err_c);
-                } else {
-                    printf("[MMM3D]Result is verified!\n");
-                    //print_matrix("C", P, dim_sz, dim_sz, 0);
-                }
-            }
-        }
+        mpi_check(MPI_Gatherv(C, per_n*per_n,  MPI_DOUBLE,
+                     P, sendcounts, displs, subarrtype,
+                     root, dim_ij_comm));
     }
-    //    if(coords[2] != 0) {
-    //        //no need the final result shown
-    //        MPI_Finalize();
-    //        return 0;
-    //    }
-    //
-    //    //firstly just do the j direction gather
-    //    dst_coords[2] = 0; //always make k == 0;
-    //    if(coords[1] == 0) { //j == 0
-    //        double R1[dim_sz];
-    //        R1[0] = C[0];
-    //        for(j = 1; j < dim_sz; j++) {
-    //            dst_coords[0] = coords[0];
-    //            dst_coords[1] = j;
-    //            MPI_Cart_rank(cartcomm, dst_coords, &dst); //get the dst
-    //            MPI_Recv(&R1[j], 1, MPI_DOUBLE, dst, tag, cartcomm, &status); //receive
-    //        }
-    //        //then i direction gather, only the first column
-    //        if(coords[0] == 0) { //i == 0
-    //            //copy its own portion
-    //            for(j = 0; j < dim_sz; j++) {
-    //                P[j] = R1[j];
-    //            }
-    //            //then receive
-    //            for(i = 1; i < dim_sz; i++) {
-    //                dst_coords[0] = i;
-    //                dst_coords[1] = 0;
-    //                MPI_Cart_rank(cartcomm, dst_coords, &dst); //get the dst
-    //                MPI_Recv(&P[i*dim_sz], dim_sz, MPI_DOUBLE, dst, tag, cartcomm,  &status); //receive
-    //            }
-    //
-    //            int err_c = check_result(M, NT, P, dim_sz, dim_sz, dim_sz, 0); //not transposed
-    //            if(err_c) {
-    //                fprintf(stderr, "[Check Failure]%d errors!!!\n", err_c);
-    //            } else {
-    //                print_matrix("C", P, dim_sz, dim_sz, 0);
-    //            }
-    //        } else {
-    //            dst_coords[0] = 0;
-    //            dst_coords[1] = 0;
-    //            MPI_Cart_rank(cartcomm, dst_coords, &dst); //get the dst
-    //            MPI_Send(R1, dim_sz, MPI_DOUBLE, dst, tag, cartcomm);
-    //        }
-    //    } else {
-    //        dst_coords[0] = coords[0];
-    //        dst_coords[1] = 0;
-    //        MPI_Cart_rank(cartcomm, dst_coords, &dst); //get the dst
-    //        MPI_Send(C, 1, MPI_DOUBLE, dst, tag, cartcomm);
-    //    }
+
+    if(me == root) {
+        int err_c = check_result(M, NT, P, n, n, n, 0); //not transposed
+        if (err_c) {
+            fprintf(stderr, "[MMM3D]Check Failure: %d errors!!!\n", err_c);
+            //print_matrix("P", P, n, n, 0);
+        } else {
+            printf("[MMM3D]Result is verified!\n");
+            //print_matrix("C", P, n, n, 0);
+        }
+        free_matrix(M, NT, P);
+    }
 }
+
+
+
 
 int main(int argc, char* argv[]) {
     int me; /* rank of process */
     int p; /* number of processes */
     int src; /* rank of sender */
+    int root = 0;
     int tag = 0; /* tag for messages */
     MPI_Status status; /* return status for receive */
 
@@ -176,6 +101,10 @@ int main(int argc, char* argv[]) {
       MPI_Finalize();
       exit(1);
     }
+
+    int n = get_problem_size(argc, argv, dim_sz, me);
+    int per_n = n / dim_sz;
+
     //prepare for the cartesian topology
     MPI_Comm cartcomm;
     int nbrs[6], dims[3] = {dim_sz, dim_sz, dim_sz};
@@ -194,48 +123,76 @@ int main(int argc, char* argv[]) {
     MPI_Comm_split(cartcomm, coords[0]*dim_sz+coords[1], coords[2], &depthcomm); //k as rank
 
     double *M, *NT, *P;
-    int src_coords[3]={0,0,0}; //The src ==0's node should prepare the data
-    MPI_Cart_rank(cartcomm, src_coords, &src); //get the dst
-    if(src == me) { //I'm the {0,0,0} node
-        initial_matrix(&M, &NT, &P, dim_sz, dim_sz, dim_sz);
+    int root_coords[3]={0,0,0}; //The src ==0's node should prepare the data
+    MPI_Cart_rank(cartcomm, root_coords, &root); //get the dst
+    if(root == me) { //I'm the {0,0,0} node
+        initial_matrix(&M, &NT, &P, n, n, n);
     }
 
     //now each process has
     /*The matrix size is p * p*/
     int i, j, k;
-    double A[1]; //each on has 1
-    double BT[1]; //each only has 1
-    double C[1]; //only one
+    double *A = (double*)malloc(per_n * per_n * sizeof(double)); //each on has 1
+    double *BT = (double*)malloc(per_n * per_n * sizeof(double)); //each only has 1
+    double *C = (double*)malloc(per_n * per_n * sizeof(double)); //only per_n * per_n
 
-    //Send data from {0,0,0} to all others
-    prepare_data(dim_sz, coords, src,
-            cartcomm, rowcomm, colcomm, depthcomm,
+    //Scatter and Gather used data types
+    MPI_Datatype subarrtype;
+    int sendcounts[dim_sz*dim_sz];
+    int displs[dim_sz*dim_sz]; //value in block (resized) count
+    init_subarrtype(root, me, n, dim_sz, per_n, &subarrtype, sendcounts, displs);
+
+
+    //Send data from root {0, 0, 0} to A{j=0 array}, BT{i=0 array}
+    scatter_data(root, me, coords, n, dim_sz, per_n,
+            cartcomm, sendcounts, displs, subarrtype,
             A, BT, M, NT);
+
+    mpi_check(MPI_Barrier(cartcomm));
+    double t0, t1;
+    //Start timing point
+    t0 = MPI_Wtime();
+    //do broadcast for A/B
+    mpi_check(MPI_Bcast(A, per_n*per_n, MPI_DOUBLE, 0, rowcomm));
+    mpi_check(MPI_Bcast(BT, per_n*per_n, MPI_DOUBLE, 0, colcomm));
 
 
     //do calculation
-    C[0] = A[0] * BT[0];
-
-    // Do reduction along the depth coord
-//    // Way 1 - Use explicit send/receive
-//    double Buf[0];//used for receive data
-//    //now along the k direction reduction
-//    if(coords[2] == dim_sz - 1) {
-//        MPI_Send(C, 1, MPI_DOUBLE, nbrs[FRONT], tag, cartcomm);
-//    } else if(coords[2] > 0){
-//        MPI_Recv(Buf, 1, MPI_DOUBLE, nbrs[BACK], tag, cartcomm, &status);
-//        C[0] += Buf[0];//reduction
-//        MPI_Send(C, 1, MPI_DOUBLE, nbrs[FRONT], tag, cartcomm);
-//    } else { //the k == 0
-//        MPI_Recv(Buf, 1, MPI_DOUBLE, nbrs[BACK], tag, cartcomm, &status);
-//        C[0] += Buf[0];//reduction
-//    }
+    for(i = 0; i < per_n; i++) {
+        for(j = 0; j < per_n; j++) {
+            C[i*per_n+j] = 0;
+            for(k = 0; k < per_n; k++) {
+                C[i*per_n+j] += A[i*per_n+k] * BT[j*per_n+k];
+            }
+        }
+    }
 
     // Way 2 - Use MPI_Reduce
-    MPI_Reduce(C, C, 1, MPI_DOUBLE, MPI_SUM, 0, depthcomm);
 
-    gather_result(dim_sz, coords, rowcomm, colcomm, C, M, NT, P);
+    mpi_check(MPI_Reduce(C, C, per_n*per_n, MPI_DOUBLE, MPI_SUM, 0, depthcomm));
 
-    MPI_Finalize();
+    //End timing
+    t1 = MPI_Wtime() - t0;
+    //node the end time should be in depthcomm with k == 0
+    //end timing point
+    //use reduction to collect the final time
+    MPI_Comm dim_ij_comm;
+    MPI_Comm_split(cartcomm, coords[2], coords[0]*dim_sz+coords[1], &dim_ij_comm); //ij as rank
+
+
+    if(coords[2] == 0) {
+        MPI_Reduce(&t1, &t1, 1, MPI_DOUBLE, MPI_SUM, root, dim_ij_comm);
+        if(me == root) {
+            printf("[mmm3D]P=%d, N=%d, Time=%.9f\n", p, n, t1/(dim_sz*dim_sz));
+        }
+    }
+
+    gather_result(root, me, coords, n, dim_sz, per_n,
+            cartcomm, dim_ij_comm, sendcounts, displs, subarrtype,
+            C, M, NT, P);
+    MPI_Comm_free(&dim_ij_comm);
+    free(A); free(BT); free(C);
+    MPI_Type_free(&subarrtype);
+    mpi_check(MPI_Finalize());
     return 0;
 }

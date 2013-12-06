@@ -43,13 +43,18 @@ int main(int argc, char* argv[]) {
         //initialize A
         memcpy(A, M, sizeof(double) * n * n); //copy M->A
     }
-    //Broadcast from p == 0 to all others
-    mpi_check(MPI_Bcast(A, n*n, MPI_DOUBLE, root, MPI_COMM_WORLD));
-    //now all has A ready
 
     //use scatter to initial all BT
     mpi_check(MPI_Scatter(NT, per_n * n, MPI_DOUBLE, BT, per_n * n, MPI_DOUBLE, root, MPI_COMM_WORLD));
     //now BT is ready
+
+    double t0, t1;
+    //Start timing point
+    t0 = MPI_Wtime();
+
+    //Broadcast from p == 0 to all others
+    mpi_check(MPI_Bcast(A, n*n, MPI_DOUBLE, root, MPI_COMM_WORLD));
+    //now all has A ready
 
     //now do the matrix calculation
     for(i = 0; i < n; i++) {
@@ -59,6 +64,14 @@ int main(int argc, char* argv[]) {
                 C[i*per_n+j] += A[i*n+k] * BT[j*n+k];   //C[i,j],j is p
             }
         }
+    }
+
+    t1 = MPI_Wtime() - t0;
+    //end timing point
+    //use reduction to collect the final time
+    MPI_Reduce(&t1, &t1, 1, MPI_DOUBLE, MPI_SUM, root, MPI_COMM_WORLD);
+    if(me == root) {
+        printf("[mmm1DColumn]P=%d, N=%d, Time=%.9f\n", p, n, t1/p);
     }
 
     //Final collection of all the result to rank 0.

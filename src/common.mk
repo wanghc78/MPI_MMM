@@ -1,7 +1,7 @@
 
 
 CC=mpicc
-CCFLAGS+= -O2 -I${LEVEL}/utility
+CCFLAGS+= -O2 -g -I${LEVEL}/utility
 
 UTIL_DIR= ${LEVEL}/utility
 

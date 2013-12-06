@@ -49,6 +49,10 @@ int main(int argc, char* argv[]) {
     mpi_check(MPI_Scatter(M, n * per_n, MPI_DOUBLE, A, n * per_n, MPI_DOUBLE, root, MPI_COMM_WORLD));
     //now A is ready
 
+    double t0, t1;
+    //Start timing point
+    t0 = MPI_Wtime();
+
     //Broadcast from p == 0 to all others
     mpi_check(MPI_Bcast(BT, n*n, MPI_DOUBLE, root, MPI_COMM_WORLD));
     //now all has BT ready
@@ -62,6 +66,14 @@ int main(int argc, char* argv[]) {
                 C[i*n + j] += A[i*n + k] * BT[j*n+k];   //C[i,j],j is p
             }
         }
+    }
+
+    t1 = MPI_Wtime() - t0;
+    //end timing point
+    //use reduction to collect the final time
+    MPI_Reduce(&t1, &t1, 1, MPI_DOUBLE, MPI_SUM, root, MPI_COMM_WORLD);
+    if(me == root) {
+        printf("[mmm1DRow]P=%d, N=%d, Time=%.9f\n", p, n, t1/p);
     }
 
 

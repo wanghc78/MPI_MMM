@@ -8,6 +8,7 @@
 #ifndef UTILITH_H_
 #define UTILITH_H_
 
+#include <mpi.h>
 
 #define mpi_check(stmt) do {                               \
         int err = stmt;                                    \
@@ -24,6 +25,9 @@
  */
 int get_problem_size(int argc, char* argv[], int p, int me);
 
+void init_subarrtype(int root, int me,
+        int n, int dim_sz, int per_n,
+        MPI_Datatype* subarrtype_addr, int sendcounts[], int displs[]);
 
 /*
  * Use random data to initialize the

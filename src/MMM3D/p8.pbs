@@ -1,0 +1,21 @@
+##############################
+#
+#PBS -l walltime=00:01:00
+#PBS -l nodes=2:ppn=6
+#PBS -N MMM3D
+#PBS -q secondary
+#PBS -j oe
+###PBS -o hw_mpi.out
+###PBS -e hw_mpi.err
+#PBS -m e
+#
+##############################
+
+
+module load mvapich2/1.6-intel
+#module load mpi
+
+cd $PBS_O_WORKDIR
+mpiexec -n 8 ./MMM3D 2
+mpiexec -n 8 ./MMM3D 4
+

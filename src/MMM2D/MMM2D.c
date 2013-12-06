@@ -19,7 +19,7 @@
 #define LEFT  2
 #define RIGHT 3
 
-void prepare_data(int n, int per_n, int coords[2], int root,
+void scatter_data(int n, int per_n, int coords[2], int root,
         MPI_Comm cartcomm, MPI_Comm rowcomm, MPI_Comm colcomm,
         double A[per_n*n], double BT[per_n*n],
         double* M, double* NT) {
@@ -32,47 +32,12 @@ void prepare_data(int n, int per_n, int coords[2], int root,
         mpi_check(
                 MPI_Scatter(NT, per_n*n, MPI_DOUBLE, BT, per_n*n, MPI_DOUBLE, root, rowcomm));
     }
-    mpi_check(MPI_Barrier(cartcomm));
-
-    //The real start point.
-
-    //now do A's broadcast and B's broadcat
-    mpi_check(MPI_Bcast(A, per_n*n, MPI_DOUBLE, 0, rowcomm));
-    mpi_check(MPI_Bcast(BT, per_n*n, MPI_DOUBLE, 0, colcomm));
 }
 
-void gather_result(int n, int per_n, int dim_sz, int coords[2],
-        int me, int root,
-        MPI_Comm cartcomm, MPI_Comm rowcomm, MPI_Comm colcomm,
+void gather_result(int root, int me, int n, int dim_sz, int per_n,
+        MPI_Comm cartcomm, int sendcounts[dim_sz*dim_sz],  int displs[dim_sz*dim_sz], MPI_Datatype subarrtype,
         double C[per_n*per_n],
         double* M, double* NT, double* P) {
-
-    //firstly just do the j direction gather
-    //In order to get the right gather, I use MPI_Type_vector
-    /* create a datatype to describe the subarrays of the global array */
-
-    int sizes[2]    = {n, n};         /* global size */
-    int subsizes[2] = {per_n, per_n}; /* local size */
-    int starts[2]   = {0,0};          /* where this one starts */
-    MPI_Datatype type, subarrtype;
-    mpi_check(MPI_Type_create_subarray(2, sizes, subsizes, starts, MPI_ORDER_C, MPI_DOUBLE, &type));
-    mpi_check(MPI_Type_create_resized(type, 0, per_n*sizeof(double), &subarrtype));
-    mpi_check(MPI_Type_commit(&subarrtype));
-
-    int sendcounts[dim_sz*dim_sz];
-    int displs[dim_sz*dim_sz]; //value in block (resized) count
-    int i,j;
-    if(me == root) {
-        for (i=0; i< dim_sz*dim_sz; i++) { sendcounts[i] = 1; }
-        int disp = 0;
-        for (i=0; i<dim_sz; i++) {
-            for (j=0; j<dim_sz; j++) {
-                displs[i*dim_sz+j] = disp;
-                disp += 1;
-            }
-            disp += (per_n-1)*dim_sz;
-        }
-    }
 
     mpi_check(MPI_Gatherv(C, per_n*per_n,  MPI_DOUBLE,
                  P, sendcounts, displs, subarrtype,
@@ -151,9 +116,20 @@ int main(int argc, char* argv[]) {
     double *C = (double*)malloc(per_n * per_n * sizeof(double));
 
     //just two steps, first scatter, then
-    prepare_data(n, per_n, coords, root,
+    scatter_data(n, per_n, coords, root,
             cartcomm,  rowcomm, colcomm,
             A, BT, M, NT);
+
+    mpi_check(MPI_Barrier(cartcomm));
+    double t0, t1;
+    //Start timing point
+    t0 = MPI_Wtime();
+    //The real start point.
+
+    //now do A's broadcast and B's broadcat
+    mpi_check(MPI_Bcast(A, per_n*n, MPI_DOUBLE, 0, rowcomm));
+    mpi_check(MPI_Bcast(BT, per_n*n, MPI_DOUBLE, 0, colcomm));
+
 
     //now do the vector vector calculation
     for(i = 0; i < per_n; i++) {
@@ -165,10 +141,25 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    //firstly just do the j direction gather
-    //all will join
-    gather_result(n, per_n, dim_sz, coords, me, root,
-            cartcomm, rowcomm, colcomm, C, M, NT, P);
+    //End timing
+    t1 = MPI_Wtime() - t0;
+    //end timing point
+    //use reduction to collect the final time
+    MPI_Reduce(&t1, &t1, 1, MPI_DOUBLE, MPI_SUM, root, MPI_COMM_WORLD);
+    if(me == root) {
+        printf("[mmm2D]P=%d, N=%d, Time=%.9f\n", p, n, t1/p);
+    }
+
+
+    //Scatter and Gather used data types
+    MPI_Datatype subarrtype;
+    int sendcounts[dim_sz*dim_sz];
+    int displs[dim_sz*dim_sz]; //value in block (resized) count
+    init_subarrtype(root, me, n, dim_sz, per_n, &subarrtype, sendcounts, displs);
+
+    gather_result(root, me, n, dim_sz, per_n,
+            cartcomm, sendcounts, displs, subarrtype,
+            C, M, NT, P);
 
     free(A); free(BT); free(C);
     MPI_Finalize();
