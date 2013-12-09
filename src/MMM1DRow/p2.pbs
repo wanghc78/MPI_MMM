@@ -1,0 +1,71 @@
+##############################
+#
+#PBS -l walltime=00:10:00
+#PBS -l nodes=1:ppn=6
+#PBS -N MMM1DRow_p2
+#PBS -q secondary
+#PBS -j oe
+###PBS -o hw_mpi.out
+###PBS -e hw_mpi.err
+#PBS -m e
+#
+##############################
+
+
+module load mvapich2/1.6-intel
+#module load mpi
+
+cd $PBS_O_WORKDIR
+export PN=2
+mpiexec -n $PN ./MMM1DRow 100
+mpiexec -n $PN ./MMM1DRow 200
+mpiexec -n $PN ./MMM1DRow 300
+mpiexec -n $PN ./MMM1DRow 400
+mpiexec -n $PN ./MMM1DRow 500
+mpiexec -n $PN ./MMM1DRow 600
+mpiexec -n $PN ./MMM1DRow 700
+mpiexec -n $PN ./MMM1DRow 800
+mpiexec -n $PN ./MMM1DRow 900
+mpiexec -n $PN ./MMM1DRow 1000
+mpiexec -n $PN ./MMM1DRow 1100
+mpiexec -n $PN ./MMM1DRow 1200
+mpiexec -n $PN ./MMM1DRow 1300
+mpiexec -n $PN ./MMM1DRow 1400
+mpiexec -n $PN ./MMM1DRow 1500
+mpiexec -n $PN ./MMM1DRow 1600
+mpiexec -n $PN ./MMM1DRow 1700
+mpiexec -n $PN ./MMM1DRow 1800
+mpiexec -n $PN ./MMM1DRow 1900
+mpiexec -n $PN ./MMM1DRow 2000
+mpiexec -n $PN ./MMM1DRow 2100
+mpiexec -n $PN ./MMM1DRow 2200
+mpiexec -n $PN ./MMM1DRow 2300
+mpiexec -n $PN ./MMM1DRow 2400
+mpiexec -n $PN ./MMM1DRow 2500
+mpiexec -n $PN ./MMM1DRow 2600
+mpiexec -n $PN ./MMM1DRow 2700
+mpiexec -n $PN ./MMM1DRow 2800
+mpiexec -n $PN ./MMM1DRow 2900
+mpiexec -n $PN ./MMM1DRow 3000
+mpiexec -n $PN ./MMM1DRow 3100
+mpiexec -n $PN ./MMM1DRow 3200
+mpiexec -n $PN ./MMM1DRow 3300
+mpiexec -n $PN ./MMM1DRow 3400
+mpiexec -n $PN ./MMM1DRow 3500
+mpiexec -n $PN ./MMM1DRow 3600
+mpiexec -n $PN ./MMM1DRow 3700
+mpiexec -n $PN ./MMM1DRow 3800
+mpiexec -n $PN ./MMM1DRow 3900
+mpiexec -n $PN ./MMM1DRow 4000
+mpiexec -n $PN ./MMM1DRow 4100
+mpiexec -n $PN ./MMM1DRow 4200
+mpiexec -n $PN ./MMM1DRow 4300
+mpiexec -n $PN ./MMM1DRow 4400
+mpiexec -n $PN ./MMM1DRow 4500
+mpiexec -n $PN ./MMM1DRow 4600
+mpiexec -n $PN ./MMM1DRow 4700
+mpiexec -n $PN ./MMM1DRow 4800
+mpiexec -n $PN ./MMM1DRow 4900
+mpiexec -n $PN ./MMM1DRow 5000
+
+

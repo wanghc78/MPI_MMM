@@ -12,34 +12,29 @@
 #include <math.h>
 #include "mpi.h"
 #include "utility.h"
+#include "mkl.h"
 
-
-#define UP    0
-#define DOWN  1
-#define LEFT  2
-#define RIGHT 3
-
-void scatter_data(int n, int per_n, int coords[2], int root,
+void scatter_data(int n, int n_local, int coords[2], int root,
         MPI_Comm cartcomm, MPI_Comm rowcomm, MPI_Comm colcomm,
-        double A[per_n*n], double BT[per_n*n],
+        double A[n_local*n], double BT[n_local*n],
         double* M, double* NT) {
     //just two steps, first scatter, then
     if (coords[1] == 0) { //join then scatter from the column side, M->A
         mpi_check(
-                MPI_Scatter(M, per_n*n, MPI_DOUBLE, A, per_n*n, MPI_DOUBLE, root, colcomm));
+                MPI_Scatter(M, n_local*n, MPI_DOUBLE, A, n_local*n, MPI_DOUBLE, root, colcomm));
     }
     if (coords[0] == 0) { //join the scatter from the row side, BT
         mpi_check(
-                MPI_Scatter(NT, per_n*n, MPI_DOUBLE, BT, per_n*n, MPI_DOUBLE, root, rowcomm));
+                MPI_Scatter(NT, n_local*n, MPI_DOUBLE, BT, n_local*n, MPI_DOUBLE, root, rowcomm));
     }
 }
 
-void gather_result(int root, int me, int n, int dim_sz, int per_n,
-        MPI_Comm cartcomm, int sendcounts[dim_sz*dim_sz],  int displs[dim_sz*dim_sz], MPI_Datatype subarrtype,
-        double C[per_n*per_n],
+void gather_result(int root, int me, int n, int p_gridsize, int n_local,
+        MPI_Comm cartcomm, int sendcounts[p_gridsize*p_gridsize],  int displs[p_gridsize*p_gridsize], MPI_Datatype subarrtype,
+        double C[n_local*n_local],
         double* M, double* NT, double* P) {
 
-    mpi_check(MPI_Gatherv(C, per_n*per_n,  MPI_DOUBLE,
+    mpi_check(MPI_Gatherv(C, n_local*n_local,  MPI_DOUBLE,
                  P, sendcounts, displs, subarrtype,
                  root, cartcomm));
 
@@ -53,8 +48,9 @@ void gather_result(int root, int me, int n, int dim_sz, int per_n,
             printf("[MMM2D]Result is verified!\n");
             //print_matrix("C", P, n, n, 0);
         }
+        free_matrix(M, NT, P);
     }
-    MPI_Type_free(&subarrtype);
+
 }
 
 int main(int argc, char* argv[]) {
@@ -73,8 +69,8 @@ int main(int argc, char* argv[]) {
     mpi_check(MPI_Comm_size(MPI_COMM_WORLD, &p));
 
     /*p must be some number's square */
-    int dim_sz = (int)sqrt(p);
-    if( dim_sz * dim_sz != p) {
+    int p_gridsize = (int)sqrt(p);
+    if( p_gridsize * p_gridsize != p) {
       if (me == root){
           fprintf(stderr, "Process Number %d is not a square number!!!\n", p);
       }
@@ -82,18 +78,16 @@ int main(int argc, char* argv[]) {
       exit(1);
     }
 
-    int n = get_problem_size(argc, argv, dim_sz, me);
-    int per_n = n / dim_sz;
+    int n = get_problem_size(argc, argv, p_gridsize, me);
+    int n_local = n / p_gridsize;
 
     //prepare for the cartesian topology
     MPI_Comm cartcomm;
-    int nbrs[4], dims[2] = {dim_sz, dim_sz};
+    int nbrs[4], dims[2] = {p_gridsize, p_gridsize};
     int periods[2] = {0,0}, reorder=0,coords[2];
     mpi_check(MPI_Cart_create(MPI_COMM_WORLD, 2, dims, periods, reorder, &cartcomm));
     MPI_Comm_rank(cartcomm, &me);
     MPI_Cart_coords(cartcomm, me, 2, coords);
-    MPI_Cart_shift(cartcomm, 0, 1, &nbrs[UP], &nbrs[DOWN]);
-    MPI_Cart_shift(cartcomm, 1, 1, &nbrs[LEFT], &nbrs[RIGHT]);
 
 
     //Split the cartcomm into rowcomm, colcomm
@@ -111,12 +105,12 @@ int main(int argc, char* argv[]) {
     //now each process has
     /*The matrix size is p * p*/
     int i, j, k;
-    double *A = (double*)malloc(per_n * n*sizeof(double)); //each has per_n row, i=me, k 0:(p-1)
-    double *BT = (double*)malloc(per_n * n*sizeof(double)); //j, k
-    double *C = (double*)malloc(per_n * per_n * sizeof(double));
+    double *A = (double*)mkl_malloc(n_local * n*sizeof(double), 16); //each has n_local row, i=me, k 0:(p-1)
+    double *BT = (double*)mkl_malloc(n_local * n*sizeof(double), 16); //j, k
+    double *C = (double*)mkl_malloc(n_local * n_local * sizeof(double), 16);
 
     //just two steps, first scatter, then
-    scatter_data(n, per_n, coords, root,
+    scatter_data(n, n_local, coords, root,
             cartcomm,  rowcomm, colcomm,
             A, BT, M, NT);
 
@@ -127,19 +121,23 @@ int main(int argc, char* argv[]) {
     //The real start point.
 
     //now do A's broadcast and B's broadcat
-    mpi_check(MPI_Bcast(A, per_n*n, MPI_DOUBLE, 0, rowcomm));
-    mpi_check(MPI_Bcast(BT, per_n*n, MPI_DOUBLE, 0, colcomm));
+    mpi_check(MPI_Bcast(A, n_local*n, MPI_DOUBLE, 0, rowcomm));
+    mpi_check(MPI_Bcast(BT, n_local*n, MPI_DOUBLE, 0, colcomm));
 
 
     //now do the vector vector calculation
-    for(i = 0; i < per_n; i++) {
-        for(j = 0; j < per_n; j++) {
-            C[i*per_n+j] = 0;
-            for(k = 0; k < n; k++) {
-                C[i*per_n+j] += A[i*n+k] * BT[j*n+k];
-            }
-        }
-    }
+//    for(i = 0; i < n_local; i++) {
+//        for(j = 0; j < n_local; j++) {
+//            C[i*n_local+j] = 0;
+//            for(k = 0; k < n; k++) {
+//                C[i*n_local+j] += A[i*n+k] * BT[j*n+k];
+//            }
+//        }
+//    }
+
+    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasTrans,
+            n_local, n_local, n,
+            1, A, n, BT, n, 0, C, n_local);
 
     //End timing
     t1 = MPI_Wtime() - t0;
@@ -153,15 +151,16 @@ int main(int argc, char* argv[]) {
 
     //Scatter and Gather used data types
     MPI_Datatype subarrtype;
-    int sendcounts[dim_sz*dim_sz];
-    int displs[dim_sz*dim_sz]; //value in block (resized) count
-    init_subarrtype(root, me, n, dim_sz, per_n, &subarrtype, sendcounts, displs);
-
-    gather_result(root, me, n, dim_sz, per_n,
+    int sendcounts[p_gridsize*p_gridsize];
+    int displs[p_gridsize*p_gridsize]; //value in block (resized) count
+    init_subarrtype(root, me, n, p_gridsize, n_local, &subarrtype, sendcounts, displs);
+#ifdef VERIFY
+    gather_result(root, me, n, p_gridsize, n_local,
             cartcomm, sendcounts, displs, subarrtype,
             C, M, NT, P);
+#endif
 
-    free(A); free(BT); free(C);
+    mkl_free(A); mkl_free(BT); mkl_free(C);
     MPI_Finalize();
     return 0;
 }

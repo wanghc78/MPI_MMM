@@ -9,22 +9,22 @@
 #include<stdlib.h>
 #include <mpi.h>
 #include "utility.h"
+#include "mkl.h"
 
-
-int get_problem_size(int argc, char* argv[], int p, int me) {
-    int n = p; //problem size
+int get_problem_size(int argc, char* argv[], int dim_sz, int me) {
+    int n = dim_sz; //problem size
     if(argc > 1) {
       n = atoi(argv[1]);
       /*Padding the matrix to so that each process get the same size*/
-      int per_n = (n - 1) / p + 1;
-      if(per_n * p != n) {
+      int per_n = (n - 1) / dim_sz + 1;
+      if(per_n * dim_sz != n) {
           if(me == 0) {
-              fprintf(stdout, "[MMM1DRow]Warning: Padding the problem size from %d to %d, Grid size is %d!\n", n, per_n * p, p);
+              fprintf(stdout, "[MMM1DRow]Warning: Padding the problem size from %d to %d, Grid size is %d!\n", n, per_n * dim_sz, dim_sz);
           }
-          n = per_n * p;
+          n = per_n * dim_sz;
       } else {
           if(me == 0) {
-              fprintf(stdout, "[MMM1DRow]Problem size is %d, Grid size is %d!\n", n, p);
+              fprintf(stdout, "[MMM1DRow]Problem size is %d, Grid size is %d!\n", n, dim_sz);
           }
       }
     }
@@ -62,9 +62,9 @@ void init_subarrtype(int root, int me,
 
 
 void initial_matrix(double** A_addr, double** BT_addr, double** C_addr, int m, int n, int c) {
-    double* A = (double*)malloc(sizeof(double) * m * c);
-    double* BT = (double*)malloc(sizeof(double) * n * c);
-    double* C = (double*)malloc(sizeof(double) * m * n);
+    double* A = (double*)mkl_malloc(m * c * sizeof(double) , 16);
+    double* BT = (double*)mkl_malloc(n * c * sizeof(double), 16);
+    double* C = (double*)mkl_malloc(m * n * sizeof(double), 16);
     *A_addr = A;
     *BT_addr = BT;
     *C_addr = C;
@@ -89,15 +89,20 @@ void initial_matrix(double** A_addr, double** BT_addr, double** C_addr, int m, i
 int check_result(double* A, double* BT, double* C, int m, int n, int c, int transposed) {
     int err_c = 0; //how many errors found
     int i, j, k;
-    double* C_ref = (double*)calloc(m * n, sizeof(double)); //with zeroed
-    for(i = 0; i < m; i ++) {
-        for(j = 0; j < n; j++) {
-            C_ref[i*n+j] = 0;
-            for(k = 0; k < c; k++) {
-                C_ref[i*n+j] += A[i*c+k] * BT[j*c+k];
-            }
-        }
-    }
+    double* C_ref = (double*)mkl_malloc(m * n * sizeof(double), 16); //with zeroed
+//    for(i = 0; i < m; i ++) {
+//        for(j = 0; j < n; j++) {
+//            C_ref[i*n+j] = 0;
+//            for(k = 0; k < c; k++) {
+//                C_ref[i*n+j] += A[i*c+k] * BT[j*c+k];
+//            }
+//        }
+//    }
+
+    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasTrans,
+            m, n, c,
+            1, A, c, BT, c, 0, C_ref, n);
+
 
     if(transposed){
         for(i = 0; i < m; i++) {
@@ -111,7 +116,7 @@ int check_result(double* A, double* BT, double* C, int m, int n, int c, int tran
             err_c += (fabs(C[i] - C_ref[i]) < 0.0001 ? 0 : 1);
         }
     }
-    free(C_ref);
+    mkl_free(C_ref);
     return err_c;
 }
 
@@ -138,7 +143,7 @@ void print_matrix(char* name, double* A, int m, int n, int transposed) {
 }
 
 void free_matrix(double* A, double* B, double *C) {
-    free(A);
-    free(B);
-    free(C);
+    mkl_free(A);
+    mkl_free(B);
+    mkl_free(C);
 }

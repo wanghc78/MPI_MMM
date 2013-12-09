@@ -1,7 +1,8 @@
 
 
 CC=mpicc
-CCFLAGS+= -O2 -g -I${LEVEL}/utility
+#CCFLAGS+= -DVERIFY
+CCFLAGS+= -O3 -I${LEVEL}/utility
 
 UTIL_DIR= ${LEVEL}/utility
 
@@ -21,7 +22,7 @@ ${EXAMPLE}.o : ${EXAMPLE}.c
 	${CC} -c ${CCFLAGS} $<
 
 ${EXAMPLE}: ${OBJS}
-	${CC} ${OBJS} ${CCFLAGS} -o $@
+	${CC} ${OBJS} ${CCFLAGS} -mkl=sequential -o $@
 
 
 run: ${EXAMPLE}

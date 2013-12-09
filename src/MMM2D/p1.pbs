@@ -1,0 +1,71 @@
+##############################
+#
+#PBS -l walltime=00:10:00
+#PBS -l nodes=1:ppn=6
+#PBS -N MMM2D_p1
+#PBS -q secondary
+#PBS -j oe
+###PBS -o hw_mpi.out
+###PBS -e hw_mpi.err
+#PBS -m e
+#
+##############################
+
+
+module load mvapich2/1.6-intel
+#module load mpi
+
+cd $PBS_O_WORKDIR
+export PN=1
+mpiexec -n $PN ./MMM2D 100
+mpiexec -n $PN ./MMM2D 200
+mpiexec -n $PN ./MMM2D 300
+mpiexec -n $PN ./MMM2D 400
+mpiexec -n $PN ./MMM2D 500
+mpiexec -n $PN ./MMM2D 600
+mpiexec -n $PN ./MMM2D 700
+mpiexec -n $PN ./MMM2D 800
+mpiexec -n $PN ./MMM2D 900
+mpiexec -n $PN ./MMM2D 1000
+mpiexec -n $PN ./MMM2D 1100
+mpiexec -n $PN ./MMM2D 1200
+mpiexec -n $PN ./MMM2D 1300
+mpiexec -n $PN ./MMM2D 1400
+mpiexec -n $PN ./MMM2D 1500
+mpiexec -n $PN ./MMM2D 1600
+mpiexec -n $PN ./MMM2D 1700
+mpiexec -n $PN ./MMM2D 1800
+mpiexec -n $PN ./MMM2D 1900
+mpiexec -n $PN ./MMM2D 2000
+mpiexec -n $PN ./MMM2D 2100
+mpiexec -n $PN ./MMM2D 2200
+mpiexec -n $PN ./MMM2D 2300
+mpiexec -n $PN ./MMM2D 2400
+mpiexec -n $PN ./MMM2D 2500
+mpiexec -n $PN ./MMM2D 2600
+mpiexec -n $PN ./MMM2D 2700
+mpiexec -n $PN ./MMM2D 2800
+mpiexec -n $PN ./MMM2D 2900
+mpiexec -n $PN ./MMM2D 3000
+mpiexec -n $PN ./MMM2D 3100
+mpiexec -n $PN ./MMM2D 3200
+mpiexec -n $PN ./MMM2D 3300
+mpiexec -n $PN ./MMM2D 3400
+mpiexec -n $PN ./MMM2D 3500
+mpiexec -n $PN ./MMM2D 3600
+mpiexec -n $PN ./MMM2D 3700
+mpiexec -n $PN ./MMM2D 3800
+mpiexec -n $PN ./MMM2D 3900
+mpiexec -n $PN ./MMM2D 4000
+mpiexec -n $PN ./MMM2D 4100
+mpiexec -n $PN ./MMM2D 4200
+mpiexec -n $PN ./MMM2D 4300
+mpiexec -n $PN ./MMM2D 4400
+mpiexec -n $PN ./MMM2D 4500
+mpiexec -n $PN ./MMM2D 4600
+mpiexec -n $PN ./MMM2D 4700
+mpiexec -n $PN ./MMM2D 4800
+mpiexec -n $PN ./MMM2D 4900
+mpiexec -n $PN ./MMM2D 5000
+
+

@@ -1,0 +1,71 @@
+##############################
+#
+#PBS -l walltime=00:10:00
+#PBS -l nodes=5:ppn=6
+#PBS -N MMM25D_c3p27
+#PBS -q secondary
+#PBS -j oe
+###PBS -o hw_mpi.out
+###PBS -e hw_mpi.err
+#PBS -m e
+#
+##############################
+
+
+module load mvapich2/1.6-intel
+#module load mpi
+
+cd $PBS_O_WORKDIR
+export PN=27
+mpiexec -n $PN ./MMM25D 100 3
+mpiexec -n $PN ./MMM25D 300 3
+mpiexec -n $PN ./MMM25D 300 3
+mpiexec -n $PN ./MMM25D 400 3
+mpiexec -n $PN ./MMM25D 500 3
+mpiexec -n $PN ./MMM25D 600 3
+mpiexec -n $PN ./MMM25D 700 3
+mpiexec -n $PN ./MMM25D 800 3
+mpiexec -n $PN ./MMM25D 900 3
+mpiexec -n $PN ./MMM25D 1000 3
+mpiexec -n $PN ./MMM25D 1100 3
+mpiexec -n $PN ./MMM25D 1200 3
+mpiexec -n $PN ./MMM25D 1300 3
+mpiexec -n $PN ./MMM25D 1400 3
+mpiexec -n $PN ./MMM25D 1500 3
+mpiexec -n $PN ./MMM25D 1600 3
+mpiexec -n $PN ./MMM25D 1700 3
+mpiexec -n $PN ./MMM25D 1800 3
+mpiexec -n $PN ./MMM25D 1900 3
+mpiexec -n $PN ./MMM25D 3000 3
+mpiexec -n $PN ./MMM25D 3100 3
+mpiexec -n $PN ./MMM25D 3200 3
+mpiexec -n $PN ./MMM25D 3300 3
+mpiexec -n $PN ./MMM25D 3400 3
+mpiexec -n $PN ./MMM25D 3500 3
+mpiexec -n $PN ./MMM25D 3600 3
+mpiexec -n $PN ./MMM25D 3700 3
+mpiexec -n $PN ./MMM25D 3800 3
+mpiexec -n $PN ./MMM25D 3900 3
+mpiexec -n $PN ./MMM25D 3000 3
+mpiexec -n $PN ./MMM25D 3100 3
+mpiexec -n $PN ./MMM25D 3200 3
+mpiexec -n $PN ./MMM25D 3300 3
+mpiexec -n $PN ./MMM25D 3400 3
+mpiexec -n $PN ./MMM25D 3500 3
+mpiexec -n $PN ./MMM25D 3600 3
+mpiexec -n $PN ./MMM25D 3700 3
+mpiexec -n $PN ./MMM25D 3800 3
+mpiexec -n $PN ./MMM25D 3900 3
+mpiexec -n $PN ./MMM25D 4000 3
+mpiexec -n $PN ./MMM25D 4100 3
+mpiexec -n $PN ./MMM25D 4200 3
+mpiexec -n $PN ./MMM25D 4300 3
+mpiexec -n $PN ./MMM25D 4400 3
+mpiexec -n $PN ./MMM25D 4500 3
+mpiexec -n $PN ./MMM25D 4600 3
+mpiexec -n $PN ./MMM25D 4700 3
+mpiexec -n $PN ./MMM25D 4800 3
+mpiexec -n $PN ./MMM25D 4900 3
+mpiexec -n $PN ./MMM25D 5000 3
+
+

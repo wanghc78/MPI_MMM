@@ -11,6 +11,7 @@
 #include <string.h>
 #include <mpi.h>
 #include "utility.h"
+#include "mkl.h"
 
 int main(int argc, char* argv[]) {
     int me; /* rank of process */
@@ -29,13 +30,13 @@ int main(int argc, char* argv[]) {
 
     /* Decide the problem size */
     int n = get_problem_size(argc, argv, p, me);
-    int per_n = n / p;
+    int n_local = n / p;
 
     /*The matrix size is n * n*/
     int i, j, k;
-    double* A = malloc(n * n * sizeof(double));
-    double* BT = malloc(per_n * n * sizeof(double));
-    double* C = malloc(n * per_n * sizeof(double));
+    double* A = mkl_malloc(n * n * sizeof(double), 16);
+    double* BT = mkl_malloc(n_local * n * sizeof(double), 16);
+    double* C = mkl_malloc(n * n_local * sizeof(double), 16);
 
     double* M, *NT, *P;
     if (me == root) {
@@ -45,7 +46,7 @@ int main(int argc, char* argv[]) {
     }
 
     //use scatter to initial all BT
-    mpi_check(MPI_Scatter(NT, per_n * n, MPI_DOUBLE, BT, per_n * n, MPI_DOUBLE, root, MPI_COMM_WORLD));
+    mpi_check(MPI_Scatter(NT, n_local * n, MPI_DOUBLE, BT, n_local * n, MPI_DOUBLE, root, MPI_COMM_WORLD));
     //now BT is ready
 
     double t0, t1;
@@ -57,14 +58,18 @@ int main(int argc, char* argv[]) {
     //now all has A ready
 
     //now do the matrix calculation
-    for(i = 0; i < n; i++) {
-        for(j = 0; j < per_n; j++){
-            C[i*per_n+j] = 0; //initial
-            for(k = 0; k < n; k++) {
-                C[i*per_n+j] += A[i*n+k] * BT[j*n+k];   //C[i,j],j is p
-            }
-        }
-    }
+//    for(i = 0; i < n; i++) {
+//        for(j = 0; j < n_local; j++){
+//            C[i*n_local+j] = 0; //initial
+//            for(k = 0; k < n; k++) {
+//                C[i*n_local+j] += A[i*n+k] * BT[j*n+k];   //C[i,j],j is p
+//            }
+//        }
+//    }
+
+    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasTrans,
+            n, n_local, n,
+            1, A, n, BT, n, 0, C, n_local);
 
     t1 = MPI_Wtime() - t0;
     //end timing point
@@ -82,16 +87,17 @@ int main(int argc, char* argv[]) {
     MPI_Type_create_resized(colrawtype, 0, 1*sizeof(double), &coltype);
     MPI_Type_commit(&coltype);
 
-    // Note local_* type use n*per_n size matrix
+    // Note local_* type use n*n_local size matrix
     MPI_Datatype local_colrawtype, local_coltype;
-    MPI_Type_vector(n, 1, per_n, MPI_DOUBLE, &local_colrawtype);
+    MPI_Type_vector(n, 1, n_local, MPI_DOUBLE, &local_colrawtype);
     MPI_Type_commit(&local_colrawtype);
     MPI_Type_create_resized(local_colrawtype, 0, 1*sizeof(double), &local_coltype);
     MPI_Type_commit(&local_coltype);
 
     //Just store the result
-    mpi_check(MPI_Gather(C, per_n, local_coltype, P, per_n, coltype, root, MPI_COMM_WORLD));
+    mpi_check(MPI_Gather(C, n_local, local_coltype, P, n_local, coltype, root, MPI_COMM_WORLD));
 
+#ifdef VERIFY
     if(me == root) {
         int err_c = check_result(M, NT, P, n, n, n, 0);
         if(err_c) {
@@ -103,9 +109,10 @@ int main(int argc, char* argv[]) {
             printf("[MMM1DColumn]Result is verified!\n");
             //print_matrix("C", P, n, n, 0);
         }
-
+        free_matrix(M, NT, P);
     }
-    free(A);free(BT); free(C);
+#endif
+    mkl_free(A);mkl_free(BT); mkl_free(C);
     MPI_Finalize();
     return 0;
 }

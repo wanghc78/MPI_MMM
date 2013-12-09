@@ -12,34 +12,27 @@
 #include <math.h>
 #include "mpi.h"
 #include "utility.h"
-
-#define UP    0
-#define DOWN  1
-#define LEFT  2
-#define RIGHT 3
-#define FRONT 4
-#define BACK  5
-
+#include "mkl.h"
 
 
 void scatter_data(int root, int me, int coords[3],
-        int n, int dim_sz, int per_n,
-        MPI_Comm cartcomm, int sendcounts[dim_sz*dim_sz],  int displs[dim_sz*dim_sz], MPI_Datatype subarrtype,
-        double A[per_n * per_n], double BT[per_n * per_n],
+        int n, int p_gridsize, int n_local,
+        MPI_Comm cartcomm, int sendcounts[p_gridsize*p_gridsize],  int displs[p_gridsize*p_gridsize], MPI_Datatype subarrtype,
+        double A[n_local * n_local], double BT[n_local * n_local],
         double* M, double* NT) {
 
     MPI_Comm dim_ik_comm, dim_jk_comm;
-    mpi_check(MPI_Comm_split(cartcomm, coords[1], coords[0]*dim_sz+coords[2], &dim_ik_comm)); //ik as rank
-    mpi_check(MPI_Comm_split(cartcomm, coords[0], coords[1]*dim_sz+coords[2], &dim_jk_comm)); //jk as rank
+    mpi_check(MPI_Comm_split(cartcomm, coords[1], coords[0]*p_gridsize+coords[2], &dim_ik_comm)); //ik as rank
+    mpi_check(MPI_Comm_split(cartcomm, coords[0], coords[1]*p_gridsize+coords[2], &dim_jk_comm)); //jk as rank
 
     if(coords[1] == 0) {
         mpi_check(MPI_Scatterv(M, sendcounts,  displs, subarrtype,
-                A, per_n*per_n, MPI_DOUBLE, 0, dim_ik_comm));
+                A, n_local*n_local, MPI_DOUBLE, 0, dim_ik_comm));
     }
 
     if(coords[0] == 0) {
         mpi_check(MPI_Scatterv(NT, sendcounts,  displs, subarrtype,
-                BT, per_n*per_n, MPI_DOUBLE, 0, dim_jk_comm));
+                BT, n_local*n_local, MPI_DOUBLE, 0, dim_jk_comm));
     }
 
     MPI_Comm_free(&dim_ik_comm);
@@ -48,14 +41,14 @@ void scatter_data(int root, int me, int coords[3],
 }
 
 void gather_result(int root, int me, int coords[3],
-        int n, int dim_sz, int per_n,
-        MPI_Comm cartcomm, MPI_Comm dim_ij_comm, int sendcounts[dim_sz*dim_sz],  int displs[dim_sz*dim_sz], MPI_Datatype subarrtype,
-        double C[per_n*per_n],
+        int n, int p_gridsize, int n_local,
+        MPI_Comm cartcomm, MPI_Comm dim_ij_comm, int sendcounts[p_gridsize*p_gridsize],  int displs[p_gridsize*p_gridsize], MPI_Datatype subarrtype,
+        double C[n_local*n_local],
         double* M, double* NT, double* P) {
 
 
     if (coords[2] == 0) { //only the k==0 join the merge
-        mpi_check(MPI_Gatherv(C, per_n*per_n,  MPI_DOUBLE,
+        mpi_check(MPI_Gatherv(C, n_local*n_local,  MPI_DOUBLE,
                      P, sendcounts, displs, subarrtype,
                      root, dim_ij_comm));
     }
@@ -93,8 +86,8 @@ int main(int argc, char* argv[]) {
     mpi_check(MPI_Comm_size(MPI_COMM_WORLD, &p));
 
     /*p must be some number's square */
-    int dim_sz = (int)pow(p,1.0/3.0);
-    if( dim_sz * dim_sz * dim_sz != p) {
+    int p_gridsize = (int)pow(p,1.0/3.0);
+    if( p_gridsize * p_gridsize * p_gridsize != p) {
       if (me == 0 ){
           fprintf(stderr, "Process Number %d is not a cubic number!!!\n", p);
       }
@@ -102,25 +95,22 @@ int main(int argc, char* argv[]) {
       exit(1);
     }
 
-    int n = get_problem_size(argc, argv, dim_sz, me);
-    int per_n = n / dim_sz;
+    int n = get_problem_size(argc, argv, p_gridsize, me);
+    int n_local = n / p_gridsize;
 
     //prepare for the cartesian topology
     MPI_Comm cartcomm;
-    int nbrs[6], dims[3] = {dim_sz, dim_sz, dim_sz};
+    int nbrs[6], dims[3] = {p_gridsize, p_gridsize, p_gridsize};
     int periods[3] = {0,0,0}, reorder=0, coords[3];
     mpi_check(MPI_Cart_create(MPI_COMM_WORLD, 3, dims, periods, reorder, &cartcomm));
     MPI_Comm_rank(cartcomm, &me);
     MPI_Cart_coords(cartcomm, me, 3, coords);
-    MPI_Cart_shift(cartcomm, 0, 1, &nbrs[UP], &nbrs[DOWN]);
-    MPI_Cart_shift(cartcomm, 1, 1, &nbrs[LEFT], &nbrs[RIGHT]);
-    MPI_Cart_shift(cartcomm, 2, 1, &nbrs[FRONT], &nbrs[BACK]);
 
     //Split the cartcomm into rowcomm(hor-broadcast), colcomm(vertical broadcast), depthcomm (z dim reduction)
     MPI_Comm rowcomm, colcomm, depthcomm;
-    MPI_Comm_split(cartcomm, coords[0]*dim_sz+coords[2], coords[1], &rowcomm); //j as rank
-    MPI_Comm_split(cartcomm, coords[1]*dim_sz+coords[2], coords[0], &colcomm); //i as rank
-    MPI_Comm_split(cartcomm, coords[0]*dim_sz+coords[1], coords[2], &depthcomm); //k as rank
+    MPI_Comm_split(cartcomm, coords[0]*p_gridsize+coords[2], coords[1], &rowcomm); //j as rank
+    MPI_Comm_split(cartcomm, coords[1]*p_gridsize+coords[2], coords[0], &colcomm); //i as rank
+    MPI_Comm_split(cartcomm, coords[0]*p_gridsize+coords[1], coords[2], &depthcomm); //k as rank
 
     double *M, *NT, *P;
     int root_coords[3]={0,0,0}; //The src ==0's node should prepare the data
@@ -132,19 +122,19 @@ int main(int argc, char* argv[]) {
     //now each process has
     /*The matrix size is p * p*/
     int i, j, k;
-    double *A = (double*)malloc(per_n * per_n * sizeof(double)); //each on has 1
-    double *BT = (double*)malloc(per_n * per_n * sizeof(double)); //each only has 1
-    double *C = (double*)malloc(per_n * per_n * sizeof(double)); //only per_n * per_n
+    double *A = (double*)mkl_malloc(n_local * n_local * sizeof(double), 16); //each on has 1
+    double *BT = (double*)mkl_malloc(n_local * n_local * sizeof(double), 16); //each only has 1
+    double *C = (double*)mkl_malloc(n_local * n_local * sizeof(double), 16); //only n_local * n_local
 
     //Scatter and Gather used data types
     MPI_Datatype subarrtype;
-    int sendcounts[dim_sz*dim_sz];
-    int displs[dim_sz*dim_sz]; //value in block (resized) count
-    init_subarrtype(root, me, n, dim_sz, per_n, &subarrtype, sendcounts, displs);
+    int sendcounts[p_gridsize*p_gridsize];
+    int displs[p_gridsize*p_gridsize]; //value in block (resized) count
+    init_subarrtype(root, me, n, p_gridsize, n_local, &subarrtype, sendcounts, displs);
 
 
     //Send data from root {0, 0, 0} to A{j=0 array}, BT{i=0 array}
-    scatter_data(root, me, coords, n, dim_sz, per_n,
+    scatter_data(root, me, coords, n, p_gridsize, n_local,
             cartcomm, sendcounts, displs, subarrtype,
             A, BT, M, NT);
 
@@ -153,23 +143,29 @@ int main(int argc, char* argv[]) {
     //Start timing point
     t0 = MPI_Wtime();
     //do broadcast for A/B
-    mpi_check(MPI_Bcast(A, per_n*per_n, MPI_DOUBLE, 0, rowcomm));
-    mpi_check(MPI_Bcast(BT, per_n*per_n, MPI_DOUBLE, 0, colcomm));
+    mpi_check(MPI_Bcast(A, n_local*n_local, MPI_DOUBLE, 0, rowcomm));
+    mpi_check(MPI_Bcast(BT, n_local*n_local, MPI_DOUBLE, 0, colcomm));
 
 
     //do calculation
-    for(i = 0; i < per_n; i++) {
-        for(j = 0; j < per_n; j++) {
-            C[i*per_n+j] = 0;
-            for(k = 0; k < per_n; k++) {
-                C[i*per_n+j] += A[i*per_n+k] * BT[j*per_n+k];
-            }
-        }
-    }
+//    for(i = 0; i < n_local; i++) {
+//        for(j = 0; j < n_local; j++) {
+//            C[i*n_local+j] = 0;
+//            for(k = 0; k < n_local; k++) {
+//                C[i*n_local+j] += A[i*n_local+k] * BT[j*n_local+k];
+//            }
+//        }
+//    }
+
+    //use mkl
+    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasTrans,
+            n_local, n_local, n_local,
+            1, A, n_local, BT, n_local, 0, C, n_local);
+
 
     // Way 2 - Use MPI_Reduce
 
-    mpi_check(MPI_Reduce(C, C, per_n*per_n, MPI_DOUBLE, MPI_SUM, 0, depthcomm));
+    mpi_check(MPI_Reduce(C, C, n_local*n_local, MPI_DOUBLE, MPI_SUM, 0, depthcomm));
 
     //End timing
     t1 = MPI_Wtime() - t0;
@@ -177,21 +173,22 @@ int main(int argc, char* argv[]) {
     //end timing point
     //use reduction to collect the final time
     MPI_Comm dim_ij_comm;
-    MPI_Comm_split(cartcomm, coords[2], coords[0]*dim_sz+coords[1], &dim_ij_comm); //ij as rank
+    MPI_Comm_split(cartcomm, coords[2], coords[0]*p_gridsize+coords[1], &dim_ij_comm); //ij as rank
 
 
     if(coords[2] == 0) {
         MPI_Reduce(&t1, &t1, 1, MPI_DOUBLE, MPI_SUM, root, dim_ij_comm);
         if(me == root) {
-            printf("[mmm3D]P=%d, N=%d, Time=%.9f\n", p, n, t1/(dim_sz*dim_sz));
+            printf("[mmm3D]P=%d, N=%d, Time=%.9f\n", p, n, t1/(p_gridsize*p_gridsize));
         }
     }
-
-    gather_result(root, me, coords, n, dim_sz, per_n,
+#ifdef VERIFY
+    gather_result(root, me, coords, n, p_gridsize, n_local,
             cartcomm, dim_ij_comm, sendcounts, displs, subarrtype,
             C, M, NT, P);
+#endif
     MPI_Comm_free(&dim_ij_comm);
-    free(A); free(BT); free(C);
+    mkl_free(A); mkl_free(BT); mkl_free(C);
     MPI_Type_free(&subarrtype);
     mpi_check(MPI_Finalize());
     return 0;
