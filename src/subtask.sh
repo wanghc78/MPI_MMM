@@ -37,6 +37,36 @@ qsub p121.pbs
 qsub p144.pbs
 cd ..
 
+cd MMMFox
+qsub p1.pbs
+qsub p4.pbs
+qsub p9.pbs
+qsub p16.pbs
+qsub p25.pbs
+qsub p36.pbs
+qsub p49.pbs
+qsub p64.pbs
+qsub p81.pbs
+qsub p100.pbs
+qsub p121.pbs
+qsub p144.pbs
+cd ..
+
+cd MMMCannon
+qsub p1.pbs
+qsub p4.pbs
+qsub p9.pbs
+qsub p16.pbs
+qsub p25.pbs
+qsub p36.pbs
+qsub p49.pbs
+qsub p64.pbs
+qsub p81.pbs
+qsub p100.pbs
+qsub p121.pbs
+qsub p144.pbs
+cd ..
+
 
 cd MMM3D
 qsub p1.pbs

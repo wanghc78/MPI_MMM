@@ -34,6 +34,7 @@ int get_problem_size(int argc, char* argv[], int dim_sz, int me) {
 
 /*
  * Construct a sub array type for scatter and gather data
+ * Reference: http://stackoverflow.com/questions/9269399/sending-blocks-of-2d-array-in-c-using-mpi/9271753#9271753
  */
 void init_subarrtype(int root, int me,
         int n, int dim_sz, int per_n,
